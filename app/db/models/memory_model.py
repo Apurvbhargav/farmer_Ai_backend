@@ -9,8 +9,9 @@ from sqlalchemy import (
 )
 
 from sqlalchemy.dialects.postgresql import JSONB
-
 from sqlalchemy.sql import func
+
+from pgvector.sqlalchemy import Vector
 
 from app.db.session import Base
 
@@ -44,6 +45,12 @@ class FarmerMemoryEvent(Base):
         index=True
     )
 
+    crop_cycle_id = Column(
+        String,
+        nullable=True,
+        index=True
+    )
+
     event_time = Column(
         TIMESTAMP,
         nullable=True
@@ -55,6 +62,16 @@ class FarmerMemoryEvent(Base):
         default={}
     )
 
+    memory_text = Column(
+        Text,
+        nullable=True
+    )
+
+    embedding = Column(
+        Vector(3072),
+        nullable=True
+    )
+
     source_query = Column(
         Text,
         nullable=True
@@ -63,6 +80,11 @@ class FarmerMemoryEvent(Base):
     confidence = Column(
         Integer,
         nullable=True
+    )
+
+    importance_score = Column(
+        Integer,
+        default=50
     )
 
     created_at = Column(

@@ -2,10 +2,7 @@ import json
 import logging
 
 from app.services.llm_service import ask_llm
-
-from app.services.memory_service import (
-    get_recent_memory
-)
+from app.services.retrieval_service import retrieve_relevant_memories
 
 logger = logging.getLogger(__name__)
 
@@ -252,21 +249,18 @@ def analyze_farmer_query(
     query: str
 ):
 
-    memories = get_recent_memory(
-        db=db,
-        farmer_id=farmer_id,
-        limit=10
-    )
+    memories = memories = retrieve_relevant_memories(
+    db=db,
+    farmer_id=farmer_id,
+    query=query,
+    limit=5
+)
+    print(memories)
 
-    memory_data = []
-
-    for item in memories:
-
-        memory_data.append({
-            "event_type": item.event_type,
-            "crop_name": item.crop_name,
-            "details": item.details
-        })
+    memory_data = [
+    item["memory_text"]
+    for item in memories
+]
 
     prompt = PROMPT_TEMPLATE.format(
         memory=json.dumps(memory_data),
