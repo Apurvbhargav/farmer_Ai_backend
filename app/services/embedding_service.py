@@ -13,6 +13,6 @@ def generate_embedding(text: str):
         contents=text
     )
 
-    print(response)
+    #print(response)
 
     return response.embeddings[0].values

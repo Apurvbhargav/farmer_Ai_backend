@@ -17,6 +17,10 @@ from app.agents.followup_agent import (
     generate_followup_questions
 )
 
+from app.agents.recommendation_agent import (
+    generate_recommendation
+)
+
 from app.services.memory_service import (
     save_memory_event
 )
@@ -53,23 +57,43 @@ def analyze_query(
 ):
 
     # STEP 1
-    # Analyze farmer query
+    # Context Agent + Memory Retrieval
 
-    analysis = analyze_farmer_query(
+    context_result = analyze_farmer_query(
         db=db,
         farmer_id=farmer_id,
         query=request.query
     )
 
+    analysis = context_result[
+        "analysis"
+    ]
+
+    retrieved_memories = context_result[
+        "retrieved_memories"
+    ]
+
     # STEP 2
-    # Generate followup questions
+    # Followup Agent
 
     followup = generate_followup_questions(
         analysis=analysis
     )
 
     # STEP 3
-    # Save memory if important
+    # Recommendation Agent
+
+    recommendation = generate_recommendation(
+
+        analysis=analysis,
+
+        memories=retrieved_memories,
+
+        followup_answers={}
+    )
+
+    # STEP 4
+    # Save Memory
 
     if analysis.get("should_store_memory"):
 
@@ -123,5 +147,7 @@ def analyze_query(
 
         "analysis": analysis,
 
-        "followup": followup
+        "followup": followup,
+
+        "recommendation": recommendation
     }

@@ -241,26 +241,25 @@ Farmer Query:
 {query}
 
 """
-
-
 def analyze_farmer_query(
     db,
     farmer_id: int,
     query: str
 ):
 
-    memories = memories = retrieve_relevant_memories(
-    db=db,
-    farmer_id=farmer_id,
-    query=query,
-    limit=5
-)
+    memories = retrieve_relevant_memories(
+        db=db,
+        farmer_id=farmer_id,
+        query=query,
+        limit=5
+    )
+
     print(memories)
 
     memory_data = [
-    item["memory_text"]
-    for item in memories
-]
+        item["memory_text"]
+        for item in memories
+    ]
 
     prompt = PROMPT_TEMPLATE.format(
         memory=json.dumps(memory_data),
@@ -269,15 +268,22 @@ def analyze_farmer_query(
 
     response = ask_llm(prompt)
 
-    logger.info(f"Raw LLM Response: {response}")
+    logger.info(
+        f"Raw LLM Response: {response}"
+    )
 
     try:
 
-        # remove markdown wrappers
-        response = response.replace("```json", "")
-        response = response.replace("```", "")
+        response = response.replace(
+            "```json",
+            ""
+        )
 
-        # extract json only
+        response = response.replace(
+            "```",
+            ""
+        )
+
         start = response.find("{")
         end = response.rfind("}") + 1
 
@@ -285,9 +291,18 @@ def analyze_farmer_query(
 
         response = response.strip()
 
-        logger.info(f"Cleaned LLM Response: {response}")
+        logger.info(
+            f"Cleaned LLM Response: {response}"
+        )
 
-        return json.loads(response)
+        analysis = json.loads(response)
+
+        return {
+
+            "analysis": analysis,
+
+            "retrieved_memories": memories
+        }
 
     except Exception as e:
 
@@ -300,15 +315,21 @@ def analyze_farmer_query(
         )
 
         return {
-            "event_type": "",
-            "crop": "",
-            "action": "",
-            "chemical": "",
-            "days_ago": None,
-            "missing_fields": [
-                "Unable to parse LLM response"
-            ],
-            "confidence": 0,
-            "should_store_memory": False,
-            "error": f"JSON parsing failed: {str(e)}"
+
+            "analysis": {
+
+                "event_type": "",
+                "crop": "",
+                "action": "",
+                "chemical": "",
+                "days_ago": None,
+                "missing_fields": [
+                    "Unable to parse LLM response"
+                ],
+                "confidence": 0,
+                "should_store_memory": False,
+                "error": f"JSON parsing failed: {str(e)}"
+            },
+
+            "retrieved_memories": []
         }
