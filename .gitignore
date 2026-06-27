@@ -27,6 +27,11 @@ share/python-wheels/
 MANIFEST
 pgvector
 testconnection.py
+GRAPH_DOCUMENTATION.md
+LANGGRAPH_INTEGRATION_GUIDE.py
+visualize_graph.py
+seegraph.py
+farmer_workflow.png
 
 # PyInstaller
 #   Usually these files are written by a python script from a template

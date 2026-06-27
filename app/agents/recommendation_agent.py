@@ -77,6 +77,16 @@ def generate_recommendation(
         f"Recommendation Response: {response}"
     )
 
+    if not response:
+        logger.warning("LLM returned empty response, returning default recommendation")
+        return {
+            "problem_summary": "Unable to generate summary at this time",
+            "recommendation": "Please try again in a moment",
+            "priority": "medium",
+            "reasoning": "API temporarily unavailable",
+            "needs_expert": True
+        }
+
     try:
 
         response = response.replace(
@@ -92,11 +102,31 @@ def generate_recommendation(
         start = response.find("{")
         end = response.rfind("}") + 1
 
+        if start == -1 or end == 0:
+            logger.error(f"Failed to parse LLM response as JSON: {response}")
+            return {
+                "problem_summary": "Unable to parse response",
+                "recommendation": "Please try again",
+                "priority": "medium",
+                "reasoning": "Response parsing failed",
+                "needs_expert": True
+            }
+
         response = response[start:end]
 
         response = response.strip()
 
         return json.loads(response)
+    
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse LLM response as JSON: {e}\nResponse content: {response}")
+        return {
+            "problem_summary": "Unable to parse response",
+            "recommendation": "Please try again",
+            "priority": "medium",
+            "reasoning": "Response parsing failed",
+            "needs_expert": True
+        }
 
     except Exception as e:
 
