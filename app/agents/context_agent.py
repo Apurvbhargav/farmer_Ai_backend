@@ -1,13 +1,16 @@
 import json
 import logging
 
+from langchain_core.prompts import PromptTemplate
+
 from app.services.llm_service import ask_llm
 from app.services.retrieval_service import retrieve_relevant_memories
 
 logger = logging.getLogger(__name__)
 
 
-PROMPT_TEMPLATE = """
+PROMPT_TEMPLATE = PromptTemplate.from_template(
+    """
 You are an advanced multilingual agricultural intelligence system designed for Indian farmers.
 
 Your job is to understand farmer intent from highly unstructured natural language.
@@ -62,7 +65,8 @@ STRICT OUTPUT RULES:
 Understand and extract:
 
 1. event_type
-   Type of agricultural event.
+
+Type of agricultural event.
 
 Possible examples:
 
@@ -85,7 +89,8 @@ Possible examples:
 ---
 
 2. crop
-   Extract crop name if mentioned or strongly implied.
+
+Extract crop name if mentioned or strongly implied.
 
 Examples:
 
@@ -103,7 +108,8 @@ null
 ---
 
 3. action
-   Main farmer intent/action.
+
+Main farmer intent/action.
 
 Examples:
 
@@ -120,7 +126,8 @@ Examples:
 ---
 
 4. chemical
-   Extract:
+
+Extract:
 
 * fertilizer
 * pesticide
@@ -157,9 +164,9 @@ Convert into integer days if possible.
 
 Examples:
 
-* kal → 1
-* parso → 2
-* hafte bhar → 7
+* kal -> 1
+* parso -> 2
+* hafte bhar -> 7
 
 If unclear:
 null
@@ -193,10 +200,10 @@ Confidence score of extraction.
 
 Guidelines:
 
-* 0.9+ → very clear query
-* 0.7 → mostly understandable
-* 0.5 → partially vague
-* below 0.5 → highly uncertain
+* 0.9+ -> very clear query
+* 0.7 -> mostly understandable
+* 0.5 -> partially vague
+* below 0.5 -> highly uncertain
 
 ---
 
@@ -220,14 +227,14 @@ Else false.
 RESPONSE FORMAT:
 
 {{
-"event_type": "",
-"crop": "",
-"action": "",
-"chemical": "",
-"days_ago": null,
-"missing_fields": [],
-"confidence": 0,
-"should_store_memory": false
+    "event_type": "",
+    "crop": "",
+    "action": "",
+    "chemical": "",
+    "days_ago": null,
+    "missing_fields": [],
+    "confidence": 0,
+    "should_store_memory": false
 }}
 
 ---
@@ -239,14 +246,66 @@ Farmer Memory:
 
 Farmer Query:
 {query}
-
 """
+)
+
+
+DEFAULT_ANALYSIS = {
+    "event_type": "unknown",
+    "crop": None,
+    "action": None,
+    "chemical": None,
+    "days_ago": None,
+    "missing_fields": [],
+    "confidence": 0,
+    "should_store_memory": False
+}
+
+
+def extract_json(response: str) -> dict:
+    if not response:
+        raise ValueError("Empty LLM response")
+
+    cleaned_response = response.replace("```json", "")
+    cleaned_response = cleaned_response.replace("```", "")
+    cleaned_response = cleaned_response.strip()
+
+    start = cleaned_response.find("{")
+    end = cleaned_response.rfind("}") + 1
+
+    if start == -1 or end == 0:
+        raise ValueError("No JSON object found in LLM response")
+
+    json_text = cleaned_response[start:end]
+
+    return json.loads(json_text)
+
+
+def normalize_analysis(analysis: dict) -> dict:
+    normalized = DEFAULT_ANALYSIS.copy()
+    normalized.update(analysis)
+
+    if not isinstance(normalized.get("missing_fields"), list):
+        normalized["missing_fields"] = []
+
+    try:
+        normalized["confidence"] = float(normalized.get("confidence", 0))
+    except (TypeError, ValueError):
+        normalized["confidence"] = 0
+
+    normalized["confidence"] = max(0, min(1, normalized["confidence"]))
+
+    if not isinstance(normalized.get("should_store_memory"), bool):
+        normalized["should_store_memory"] = False
+
+    return normalized
+
+
 def analyze_farmer_query(
     db,
     farmer_id: int,
     query: str
 ):
-
     memories = retrieve_relevant_memories(
         db=db,
         farmer_id=farmer_id,
@@ -254,82 +313,42 @@ def analyze_farmer_query(
         limit=5
     )
 
-    print(memories)
-
     memory_data = [
         item["memory_text"]
         for item in memories
     ]
 
     prompt = PROMPT_TEMPLATE.format(
-        memory=json.dumps(memory_data),
+        memory=json.dumps(memory_data, ensure_ascii=False),
         query=query
     )
 
     response = ask_llm(prompt)
 
-    logger.info(
-        f"Raw LLM Response: {response}"
-    )
+    logger.info(f"Raw LLM Response: {response}")
 
     try:
+        analysis = extract_json(response)
+        analysis = normalize_analysis(analysis)
 
-        response = response.replace(
-            "```json",
-            ""
-        )
-
-        response = response.replace(
-            "```",
-            ""
-        )
-
-        start = response.find("{")
-        end = response.rfind("}") + 1
-
-        response = response[start:end]
-
-        response = response.strip()
-
-        logger.info(
-            f"Cleaned LLM Response: {response}"
-        )
-
-        analysis = json.loads(response)
+        logger.info(f"Parsed Analysis: {analysis}")
 
         return {
-
             "analysis": analysis,
-
             "retrieved_memories": memories
         }
 
     except Exception as e:
+        logger.error(f"Failed to parse LLM response as JSON: {e}")
+        logger.error(f"Response content: {response}")
 
-        logger.error(
-            f"Failed to parse LLM response as JSON: {e}"
-        )
-
-        logger.error(
-            f"Response content: {response}"
-        )
+        fallback_analysis = DEFAULT_ANALYSIS.copy()
+        fallback_analysis["missing_fields"] = [
+            "Unable to parse LLM response"
+        ]
+        fallback_analysis["error"] = f"JSON parsing failed: {str(e)}"
 
         return {
-
-            "analysis": {
-
-                "event_type": "",
-                "crop": "",
-                "action": "",
-                "chemical": "",
-                "days_ago": None,
-                "missing_fields": [
-                    "Unable to parse LLM response"
-                ],
-                "confidence": 0,
-                "should_store_memory": False,
-                "error": f"JSON parsing failed: {str(e)}"
-            },
-
-            "retrieved_memories": []
+            "analysis": fallback_analysis,
+            "retrieved_memories": memories
         }

@@ -1,28 +1,29 @@
-from google import genai
 import logging
+
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 from app.config import GEMINI_API_KEY
 
 logger = logging.getLogger(__name__)
 
-client = genai.Client(
-    api_key=GEMINI_API_KEY
+embeddings = GoogleGenerativeAIEmbeddings(
+    model="models/gemini-embedding-001",
+    google_api_key=GEMINI_API_KEY
 )
 
+
 def generate_embedding(text: str):
-    
     if not GEMINI_API_KEY:
         logger.error("GEMINI_API_KEY not set in environment variables")
         raise ValueError("GEMINI_API_KEY is not configured")
 
-    try:
-        response = client.models.embed_content(
-            model="gemini-embedding-001",
-            contents=text
-        )
+    if not text or not text.strip():
+        logger.error("Cannot generate embedding for empty text")
+        raise ValueError("Text cannot be empty")
 
-        return response.embeddings[0].values
-    
+    try:
+        return embeddings.embed_query(text)
+
     except Exception as e:
-        logger.error(f"Error generating embedding: {str(e)}")
+        logger.error(f"Error generating embedding through LangChain: {str(e)}")
         raise
